@@ -60,9 +60,8 @@ Sub Initialize
 	ref_modeloemail = job.ref_modeloemail(0)
 	ref_blacklistcadastro = job.ref_blacklistcadastro(0)
 	ref_segmentacao = job.ref_segmentacao(0)
-	ref_segmentacao = job.ref_segmentacao(0)
 	ref_emailcampanha = job.ref_emailcampanha(0)
-	ref_metricaemail = ""
+	ref_metricaemail = job.ref_metricaemail(0)
 	autenticado = job.autenticado(0)
 	
 	
@@ -145,8 +144,8 @@ Sub Initialize
 			If Not entryP Is Nothing Then
 				If entryP.isDocument() Then 
 					Dim posicao
-					posicao = Split( entryP.Getposition("."), "." )
-					nthdocument = CDbl(posicao(1))
+					
+					nthdocument = CDbl( entryP.Getposition(".") )
 					Set docPrincipal = entryP.Document()
 					Call createDocumentFila( docPrincipal, docModelo, docCampanha, docMetrica )
 					Set entryP = viewNav.getNext( entryP )
