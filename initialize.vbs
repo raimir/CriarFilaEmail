@@ -27,6 +27,7 @@ Sub Initialize
 	
 	'tempo inicio do agente
 	Set runAgent = session.createDateTime( CStr(Now) )
+	seconds = 0
 	
 	'usado para teste
 	'Dim dbJob As NotesDatabase  
@@ -108,12 +109,6 @@ Sub Initialize
 			
 			Set docPrincipal = listasView.getItem( StrLeft(entidadePrincipal,"-") ).getDocumentByKey( docP, True )
 			Call createDocumentFila( docPrincipal, docModelo, docCampanha, docMetrica )
-			
-			'Set stopAgent = session.createDateTime(CStr(Now))
-			'seconds = stopAgent.Timedifferencedouble(runAgent)
-			'If seconds >= 60 Then
-			'	Exit ForAll
-			'End If
 		End ForAll
 	Else 
 		Dim viewP As NotesView
@@ -124,7 +119,7 @@ Sub Initialize
 		If Not viewP Is Nothing Then
 			If viewP.isCategorized Then 
 				If filtroPrincipal <> "" Then 
-					Set viewNav = viewP.createViewNavFromCategory( filtroPrincipal )
+					Set viewNav = viewP.createViewNavFromCategory(filtroPrincipal)
 				Else
 					Set viewNav = viewP.createViewNav()
 				End If
@@ -136,7 +131,8 @@ Sub Initialize
 		'pegando a posição do último documentoque foi enviado
 		nthdocument = job.nthdocument(0)
 		If nthdocument > 0 Then 
-			Set entryP = viewNav.Getnth( (nthdocument + 1) )	
+			Set entryP = viewNav.Getnth(nthdocument)	
+			set entryP = viewNav.getNext(entryP)
 		Else
 			Set entryP = viewNav.getFirst()
 		End If
@@ -158,24 +154,21 @@ Sub Initialize
 				End If
 			End If
 			
-			'verificando o status do job para saber se está ativo
+			'verificando o status do job para saber se o documento é existente
 			Set stJob = stView.Getdocumentbykey( job.xtr_cod(0), True )	
 			If stJob Is Nothing Then
 				staJob = false
+			else
+				'parando agent depois de ser executado por um determinado tempo
+				Set stopAgent = session.createDateTime( CStr(Now) )
+				seconds = stopAgent.Timedifferencedouble(runAgent)
+				If seconds >= 60 Then
+					staJob = false
+					job.nthdocument = nthdocument
+					job.job_status = "AGUARDANDO"
+					Call job.save(True, False)
+				End If
 			End If
-			
-			'parando agent depois de ser executado por um determinado tempo
-			Set stopAgent = session.createDateTime( CStr(Now) )
-			seconds = stopAgent.Timedifferencedouble(runAgent)
-			If seconds >= 60 Then
-				staJob = false
-			End If
-			
-			If staJob = False Then
-				job.nthdocument = nthdocument
-				Call job.save(True, False)
-			End If
-
 		Wend
 	End If	
 	
