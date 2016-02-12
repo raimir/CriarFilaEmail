@@ -7,7 +7,6 @@ Sub Initialize
 	Dim docCampanha As NotesDocument
 	Dim staJob As Boolean
 	Dim auxStJob
-	Dim nthdocument As Double
 	
 	'variaveis para verificar se o job está ativo
 	Dim stDb As NotesDatabase
@@ -43,7 +42,7 @@ Sub Initialize
 		job.executado = 1
 		job.nthdocument = 0
 		Call job.save( True, False )
-	End if	
+	End If	
 	
 	'variaves de status JOB
 	Set stDb = job.Parentdatabase
@@ -67,7 +66,7 @@ Sub Initialize
 	
 	If job.docSelecionados(0) = "" Then 
 		docSelecionados = ""
-	else
+	Else
 		docSelecionados = jsonRead.Parse( job.docSelecionados(0) ).items()
 	End If
 	
@@ -113,6 +112,7 @@ Sub Initialize
 		Dim viewP As NotesView
 		Dim viewNav As NotesViewNavigator
 		Dim entryP As NotesViewEntry
+		Dim nthdocument As String
 		
 		Set viewP = listasDB.getItem( StrLeft(entidadePrincipal,"-") ).getView( viewPrincipal )
 		If Not viewP Is Nothing Then
@@ -129,23 +129,20 @@ Sub Initialize
 		
 		'pegando a posição do último documentoque foi enviado
 		nthdocument = job.nthdocument(0)
-		If nthdocument > 0 Then 
-			Set entryP = viewNav.Getnth(nthdocument)	
-			set entryP = viewNav.getNext(entryP)
+		If nthdocument <> "" Then 
+			Set entryP = viewNav.Getpos(nthdocument, ".")
 		Else
 			Set entryP = viewNav.getFirst()
 		End If
 		
-		staJob = true
+		staJob = True
 		While staJob
 			
-			staJob = false
+			staJob = False
 			
 			If Not entryP Is Nothing Then
 				If entryP.isDocument() Then 
-					Dim posicao
-					
-					nthdocument = CDbl( entryP.Getposition(".") )
+					nthdocument = entryP.Getposition(".")
 					Set docPrincipal = entryP.Document()
 					Call createDocumentFila( docPrincipal, docModelo, docCampanha, docMetrica )
 					Set entryP = viewNav.getNext( entryP )
@@ -156,13 +153,13 @@ Sub Initialize
 			'verificando o status do job para saber se o documento é existente
 			Set stJob = stView.Getdocumentbykey( job.xtr_cod(0), True )	
 			If stJob Is Nothing Then
-				staJob = false
-			else
+				staJob = False
+			Else
 				'parando agent depois de ser executado por um determinado tempo
 				Set stopAgent = session.createDateTime( CStr(Now) )
 				seconds = stopAgent.Timedifferencedouble(runAgent)
 				If seconds >= 60 Then
-					staJob = false
+					staJob = False
 					job.nthdocument = nthdocument
 					job.job_status = "AGUARDANDO"
 					Call job.save(True, False)
@@ -180,7 +177,7 @@ Sub Initialize
 	'job.job_status = "CONCLUIDO"	
 	Call job.Save( True, False )
 	Print "Finalizando " + CStr(job.job_agente(0)) + " as " + Now 
-	Exit sub
+	Exit Sub
 	
 catch:
 	If Error <> "" Then 
@@ -191,5 +188,5 @@ catch:
 		'print de finalização do agent
 		Print "Finalizando " + CStr(job.job_agente(0)) + " ás " + Now + " com erro"
 	End If
-	Exit sub
+	Exit Sub
 End Sub
