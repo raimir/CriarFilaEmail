@@ -14,6 +14,12 @@ Sub Initialize
 	Dim entry2 As NotesViewEntry
 	Dim nav As NotesViewNavigator
 	
+	dim nt1 as notesdatetime, nt2 as notesdatetime
+	dim seconds as double
+	set nt1 = new notesdatetime(cstr(now))
+
+
+
 	Set db = session.getDatabase("myserver","xtr-data\job-v1.nsf",false)
 	Set view = db.GetView("JOB-status-agente")
 	Set nav = view.Createviewnavfromcategory("CONCLUIDO")
@@ -30,4 +36,7 @@ Sub Initialize
 		End If
 		Set entry = nav.Getnext(entry)
 	Wend
+
+	set nt2 = new notesdatetime(cstr(now))
+
 End Sub
