@@ -41,7 +41,7 @@ Sub Initialize
 	
 	'bloqueando documento para agente não executar um documento bloqueado
 	'após finalizar o agente mesmo com erro se over libeira do documento
-	changeLock = false
+	changeLock = False
 	idJob = job.Universalid
 	
 	If ( Not job.hasItem("lock") ) Then 
@@ -52,10 +52,10 @@ Sub Initialize
 			changeLock = True
 			Call job.replaceItemValue("lock", 1)
 		Else 
-			Exit sub
-		End if	
+			Exit Sub
+		End If	
 	Else
-		Exit sub
+		Exit Sub
 	End If
 			
 	'inserindo campo para controle
@@ -160,7 +160,7 @@ Sub Initialize
 		End If
 		
 		staJob = True
-		While staJob = true
+		While staJob = True
 			
 			staJob = False
 			
