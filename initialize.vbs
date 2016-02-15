@@ -18,7 +18,6 @@ Sub Initialize
 	Dim seconds As Double
 
 	
-	
 	'setando o nome da function
 	nameFunction = "Initialize"
 	
@@ -29,23 +28,43 @@ Sub Initialize
 	Set jsonRead = New JSONReader
 	
 	'tempo inicio do agente
-	Set runAgent = new notesdatetime( CStr(Now) )
+	Set runAgent = New NotesDateTime( CStr(Now) )
 	
 	'usado para teste
 	'Dim dbJob As NotesDatabase  
 	'Set dbJob = session.Getdatabase("xtr-tinto/CONSISTE", "xtr-data\job-v1.nsf", False)
-	'Set job = dbJob.Getview("JOB-cod").Getdocumentbykey("job-v1-C0D052D221C556F403257F56006FCA9F", True)
+	'Set job = dbJob.Getview("JOB-cod").Getdocumentbykey("job-v1-FEE8DA51E72CDC3803257F57006E8B2F", True)
 	
 	'JOB documento de contexto
 	Set job = session.Documentcontext
 	Print "Executando " + CStr(job.job_agente(0)) + " as " + Now
 	
+	'bloqueando documento para agente não executar um documento bloqueado
+	'após finalizar o agente mesmo com erro se over libeira do documento
+	changeLock = false
+	idJob = job.Universalid
+	
+	If ( Not job.hasItem("lock") ) Then 
+		changeLock = True
+		Call job.replaceItemValue("lock", 1)
+	ElseIf job.Hasitem("lock") Then 
+		If job.getItemValue("lock")(0) = 0 Then
+			changeLock = True
+			Call job.replaceItemValue("lock", 1)
+		Else 
+			Exit sub
+		End if	
+	Else
+		Exit sub
+	End If
+			
 	'inserindo campo para controle
-	If (Not job.Hasitem("nthdocument")) And (Not job.Hasitem("executado")) Then  
-		job.executado = 1
+	If Not job.Hasitem("nthdocument") Then  
 		job.nthdocument = ""
-		Call job.save( True, False )
 	End If	
+	Call job.save(True, False)
+	
+	
 	
 	'variaves de status JOB
 	Set stDb = job.Parentdatabase
@@ -135,13 +154,13 @@ Sub Initialize
 		nthdocument = job.nthdocument(0)
 		If nthdocument <> "" Then 
 			Set entryP = viewNav.Getpos(nthdocument, ".")
-			set entryP = viewNav.getNext(entryP)
+			Set entryP = viewNav.getNext(entryP)
 		Else
 			Set entryP = viewNav.getFirst()
 		End If
 		
 		staJob = True
-		While staJob
+		While staJob = true
 			
 			staJob = False
 			
@@ -161,9 +180,9 @@ Sub Initialize
 				staJob = False
 			Else
 				'parando agent depois de ser executado por um determinado tempo
-				Set stopAgent = new notesdatetime( CStr(Now) )
+				Set stopAgent = New NotesDateTime( CStr(Now) )
 				seconds = stopAgent.Timedifferencedouble(runAgent)
-				If seconds >= 60 Then
+				If seconds > 60 Then
 					staJob = False
 					job.nthdocument = nthdocument
 					Call job.save(True, False)
@@ -173,7 +192,7 @@ Sub Initialize
 	End If	
 	
 	'print de finalização do agente
-	If seconds >= 60 Then
+	If seconds > 60 Then
 		job.job_status = "AGUARDANDO"
 	Else
 		job.job_status = "CONCLUIDO"	
