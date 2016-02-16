@@ -95,7 +95,7 @@ Sub Initialize
 				Dim diffDt
 				Set jobAgendado = dcJobStatus.getFirstDocument()
 				While Not (jobAgendado Is Nothing)
-					Set dataHoje = s.Createdatetime("")
+					Set dataHoje = s.Createdatetime(now)
 					Set dataAgendamento = jobAgendado.getItemValueDateTimeArray("job_dataagendamento")(0)
 					Call dataHoje.Setnow()
 					diffDt = dataHoje.Timedifference(dataAgendamento)
