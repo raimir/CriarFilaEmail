@@ -1,0 +1,317 @@
+%REM
+	Agent jobrunner
+	Created 28/05/2015 by Adarlan Alves Teixeira/CONSISTE
+	Description: Comments for Agent
+%END REM
+Option Public
+Option Declare
+
+Sub Initialize
+	Dim s As New NotesSession
+	
+	'hora de início da execução do jobrunner
+	Dim dt1 As NotesDateTime
+	Set dt1 = s.Createdatetime(Now)
+	Call dt1.Setnow()
+	
+	'nome do jobrunner
+	Dim nomeAgenteJobRunnerVR As Variant
+	nomeAgenteJobRunnerVR = Split(s.Currentagent.Name, "|")
+	
+	'versão dos jobs que este jobrunner executa
+	Dim jobVersao As String
+	jobVersao = "1"
+	
+	'arquivo onde ficam os agentes
+	Dim dbAgentes As NotesDatabase
+	Set dbAgentes = s.Getdatabase(s.Currentdatabase.Server, "xtr\agentes.nsf", False)
+	
+	'banco de dados onde ficam os jobs
+	Dim dbJob As NotesDatabase
+	Set dbJob = s.Getdatabase(s.Currentdatabase.Server, "xtr-data\job-v" + jobVersao + ".nsf", False)
+	
+	'visão de jobs por código
+	Dim vJobCod As NotesView
+	Set vJobCod = dbJob.Getview("JOBRUNNER-cod")
+	
+	'visão de jobs por status
+	Dim vJobStatus As NotesView
+	Set vJobStatus = dbJob.Getview("JOBRUNNER-statusdt")
+	
+	'criando job de controle desta instância do jobrunner
+	Dim jobrunner As NotesDocument
+	Set jobrunner = dbJob.Createdocument()
+	Call jobrunner.Replaceitemvalue("xtr_cod", "job-v" + jobVersao + "-" + jobrunner.Universalid)
+	Call jobrunner.Replaceitemvalue("job_runner", 1)
+	Call jobrunner.Replaceitemvalue("job_status", "EXECUTANDO")
+	Call jobrunner.Replaceitemvalue("job_horainicio", Now)
+	Call jobrunner.Replaceitemvalue("job_agenteServidor", s.Currentdatabase.Server)
+	Call jobrunner.Replaceitemvalue("job_agenteArquivo", s.Currentdatabase.FilePath)
+	Call jobrunner.Replaceitemvalue("job_agenteNome", nomeAgenteJobRunnerVR(0))
+	Call jobrunner.Replaceitemvalue("job_titulo", "Job Runner V" + jobVersao + " (task " + StrRight(StrLeft(s.Currentdatabase.Filename, "."), "-n") + ")")
+	Call jobrunner.Save(True, False, False)
+	
+	
+	'título do job que controla esta instância do jobrunner
+	Dim jobTitulo As String
+	jobTitulo = jobrunner.Getitemvalue("job_titulo")(0)
+	
+	'código do job que controla esta instância do jobrunner
+	Dim codjobrunner As String
+	codjobrunner = jobrunner.Getitemvalue("xtr_cod")(0)
+	
+	'indicando que o jobrunner começou a executar
+	Print(jobTitulo + " >> INICIOU")
+	
+	'indicando que o jobrunner está procurando um job na fila
+	'Print(jobTitulo + " >> PROCURANDO JOB NA FILA")
+	Call jobPrint(jobrunner, "PROCURANDO JOB NA FILA")
+	Call jobrunner.Save(True, False, False)
+	
+	'indica que o jobrunner está em execução
+	Dim executando As Boolean
+	executando = True
+	While executando = True
+		
+		'buscando o job que controla esta instância do jobrunner
+		Call vJobCod.Refresh()
+		Dim dcJobCod As NotesDocumentCollection
+		Set dcJobCod = vJobCod.Getalldocumentsbykey(codjobrunner, True)
+		
+		'se encontrou
+		If (dcJobCod.Count = 1) Then
+			Set jobrunner = dcJobCod.Getfirstdocument()
+			
+			'fazendo verificação dos jobs que estão com os status agendado
+			Dim dcJobStatus As NotesDocumentCollection
+			Call vJobStatus.Refresh()
+			Set dcJobStatus = vJobStatus.getAllDocumentsByKey("AGENDADO-", False)
+			
+			'se encontrou
+			If dcJobStatus.Count >= 1 Then
+				Dim jobAgendado As NotesDocument
+				Dim dataAgendamento As NotesDateTime
+				Dim dataHoje As NotesDateTime
+				Dim diffDt
+				Set jobAgendado = dcJobStatus.getFirstDocument()
+				While Not (jobAgendado Is Nothing)
+					Set dataHoje = s.Createdatetime(now)
+					Set dataAgendamento = jobAgendado.getItemValueDateTimeArray("job_dataagendamento")(0)
+					Call dataHoje.Setnow()
+					diffDt = dataHoje.Timedifference(dataAgendamento)
+					If diffDt > 0 Then 
+						Call jobAgendado.replaceItemValue("job_status", "AGUARDANDO")
+						Call jobAgendado.Save(False, False, False)
+					End If
+					Set jobAgendado = dcJobStatus.Getnextdocument(jobAgendado) 
+				Wend
+			End If 
+			
+			'pegando o primeiro job que está aguardando na fila
+			Call vJobStatus.Refresh()
+			Dim job As NotesDocument
+			Set job = vJobStatus.Getdocumentbykey("AGUARDANDO-", False)
+			
+			'se encontrou algum job na fila
+			If Not(job Is nothing) Then
+				
+				'tentando pegar o primeiro job na fila
+				Call job.Replaceitemvalue("job_status", "EXECUTANDO")
+				If job.save(False, False, False) Then 'se não conseguir salvar significa que outra instância do jobrunner já está executando esse job
+					'se conseguir salvar, o job será executado por esta instância do jobrunner
+					
+					'código do job que será executado
+					Dim codjob As String
+					codjob = job.Getitemvalue("xtr_cod")(0)
+					
+					Dim valido As Boolean 'indica se o job que será executado é válido
+					valido = False
+					
+					'verificando se o job possui o campo 'job_agente'
+					If job.Hasitem("job_agente") Then
+						
+						'verificando se o campo 'job_agente' é do tipo 'texto'
+						If job.Getfirstitem("job_agente").Type = 1280 Then
+							
+							'nome do agente que será executado
+							Dim nomeAgente As String
+							nomeAgente = job.Getitemvalue("job_agente")(0)
+							If Trim(nomeAgente) <> "" Then
+								
+								Dim agente As NotesAgent
+								Set agente = dbAgentes.Getagent(nomeAgente)
+								If Not(agente Is Nothing) Then
+									Dim nomeAgenteVR As Variant
+									nomeAgenteVR = Split(agente.Name, "|")
+									'Print(jobTitulo + " >> AGENTE: " + nomeAgenteVR(0) + " >> JOB: " + codjob + " >> " + job.Getitemvalue("job_status")(0))
+									
+									valido = True 'o job é válido
+									
+									'indicando que o jobrunner está executando esse job
+									Call jobPrint(jobrunner, "EXECUTANDO JOB: " + codjob)
+									Call jobrunner.Save(True, False, False)
+									
+									'iniciando execução do job
+									Call job.Replaceitemvalue("job_status", "EXECUTANDO")
+									Call job.Replaceitemvalue("job_horainicio", Now)
+									Call job.Replaceitemvalue("job_agenteServidor", dbAgentes.Server)
+									Call job.Replaceitemvalue("job_agenteArquivo", dbAgentes.FilePath)
+									Call job.Replaceitemvalue("job_agenteNome", nomeAgenteVR(0))
+									Call job.save(True, False, False)
+									
+									'executando o job
+									Dim ok As Boolean
+									ok = False
+									Dim msgErro As String
+									On Error GoTo ErroRun
+									Call agente.Runwithdocumentcontext(job)
+									ok = True
+ErroRun:
+									If Not ok Then
+										msgErro = Error$
+									End If
+									
+									'buscando o job novamente
+									Call vJobCod.Refresh()
+									Set job = vJobCod.Getdocumentbykey(codjob, True)
+									
+									If job Is Nothing Then
+										'o job não foi encontrado
+										Print(jobTitulo + " >> AGENTE: " + nomeAgenteVR(0) + " >> JOB: " + codjob + " >> ERRO: JOB NÃO ENCONTRADO")
+									Else
+										'o job foi encontrado
+										
+										'finalizando a execução do job sem erro
+										If ok Then
+											
+											If job.Getitemvalue("job_status")(0) = "CONCLUÍDO" Or job.Getitemvalue("job_status")(0) = "REPETIR" Then
+												Call jobPrint(job, "O processo foi executado")
+												Call job.Replaceitemvalue("job_horatermino", Now)
+												If job.Getitemvalue("job_status")(0) = "REPETIR" Then
+													Call job.Replaceitemvalue("job_status", "AGUARDANDO")
+												End If
+												Call job.save(True, False, False)
+												'Print(jobTitulo + " >> AGENTE: " + nomeAgenteVR(0) + " >> JOB: " + codjob + " >> CONCLUÍDO")
+												
+											ElseIf job.Getitemvalue("job_status")(0) = "EXECUTANDO" Then
+												ok = False
+												msgErro = "O processo foi executado, mas o status do processo não foi atualizado"
+											End If
+											
+										End If
+										
+										'finalizando a execução do job com erro
+										If Not ok Then
+											Call jobPrint(job, "Erro: " + msgErro)
+											Call job.Replaceitemvalue("job_status", "ERRO")
+											Call job.save(True, False, False)
+											Print(jobTitulo + " >> AGENTE: " + nomeAgenteVR(0) + " >> JOB: " + codjob + " >> ERRO: " + msgErro)
+										End If
+										
+									End If
+									
+								End If
+							End If
+						End If
+					End If
+					
+					'agente inválido
+					If Not valido Then
+						Call jobPrint(job, "Erro: Os parâmetros do processo são inválidos")
+						Call Job.Replaceitemvalue("job_status", "INVÁLIDO")
+						Call Job.save(True, False, False)
+						Print(jobTitulo + " >> AGENTE: " + nomeAgenteVR(0) + " >> JOB: " + codjob + " >> ERRO: JOB INVÁLIDO")
+					End If
+					
+				End If
+				
+				'verificando se o job que controla esta instância do jobrunner ainda existe
+				Call vJobCod.Refresh()
+				Dim dcJobCod_0 As NotesDocumentCollection
+				Set dcJobCod_0 = vJobCod.Getalldocumentsbykey(codjobrunner, True)
+				If (dcJobCod_0.Count = 1) Then
+					
+					'procurando o próximo job da fila
+					Set jobrunner = dcJobCod_0.Getfirstdocument()
+					'Print(jobTitulo + " >> PROCURANDO JOB NA FILA")
+					Call jobPrint(jobrunner, "PROCURANDO JOB NA FILA")
+					Call jobrunner.Save(True, False, False)
+				Else
+					executando = False
+				End If
+				
+			End If
+			
+			If executando Then
+				
+				'verificando se o jobrunner atingiu o tempo limete para execução
+				Dim dt2 As NotesDateTime
+				Set dt2 = s.Createdatetime(Now)
+				Call dt2.Setnow()
+				If dt2.Timedifference(dt1) >= 300 Then
+					executando = False
+				End If
+			End If
+			
+		Else
+			
+			'o job que controla esta instância do jobrunner não foi encontrado
+			executando = False 'encerrar execução
+			
+		End If
+	Wend
+	
+	'excluindo o job que controla esta instância do jobrunner
+	Dim excluidos As Boolean
+	excluidos = False
+	While Not excluidos
+		Call vJobCod.Refresh()
+		Dim dcJobCod_1 As NotesDocumentCollection
+		Set dcJobCod_1 = vJobCod.Getalldocumentsbykey(codjobrunner, True)
+		If (dcJobCod_1.Count = 0) Then
+			excluidos = True
+		Else
+			Set jobrunner = dcJobCod.Getfirstdocument()
+			Call jobrunner.Removepermanently(True)
+		End If
+	Wend
+	
+	Print(jobTitulo + " >> TERMINOU")
+	
+End Sub
+%REM
+	Sub jobPrint
+	Description: Comments for Sub
+%END REM
+Sub jobPrint(job As NotesDocument, msg As String)
+	Dim s As New NotesSession
+	
+	Dim dt As NotesDateTime
+	Set dt = s.Createdatetime(Now)
+	msg = dt.Dateonly + " " + dt.Timeonly + " " + msg
+	
+	If job.Hasitem("job_print") Then
+		Dim lista As Variant
+		lista = job.Getitemvalue("job_print")
+		Dim u As Integer
+		u = UBound(lista) + 1
+		ReDim Preserve lista(u)
+		lista(u) = msg
+		If u > 19 Then
+			ReDim novalista(19)
+			Dim i As Integer
+			For i = 0 To 19
+				novalista(i) = lista(UBound(lista) - 19 + i)
+			Next
+			novalista(0) = "(...)"
+			Call job.Replaceitemvalue("job_print", novalista)
+		Else
+			Call job.Replaceitemvalue("job_print", lista)
+		End If
+	Else
+		Call job.Replaceitemvalue("job_print", msg)
+	End If
+	
+	Call job.Save(True, False, False)
+	
+End Sub
