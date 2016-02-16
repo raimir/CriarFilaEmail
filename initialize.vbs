@@ -25,38 +25,29 @@ Sub Initialize
 	On Error GoTo catch	
 	
 	Set session = New NotesSession
-	Set jsonRead = New JSONReader
-	
-	'tempo inicio do agente
-	Set runAgent = New NotesDateTime( CStr(Now) )
+	'JOB documento de contexto
+	Set job = session.Documentcontext
 	
 	'usado para teste
 	'Dim dbJob As NotesDatabase  
 	'Set dbJob = session.Getdatabase("xtr-tinto/CONSISTE", "xtr-data\job-v1.nsf", False)
 	'Set job = dbJob.Getview("JOB-cod").Getdocumentbykey("job-v1-FEE8DA51E72CDC3803257F57006E8B2F", True)
 	
-	'JOB documento de contexto
-	Set job = session.Documentcontext
+	
+	Set jsonRead = New JSONReader
+	
+	'tempo inicio do agente
+	Set runAgent = New NotesDateTime( CStr(Now) )
+	
 	Print "Executando " + CStr(job.job_agente(0)) + " as " + Now
 	
-	'bloqueando documento para agente não executar um documento bloqueado
-	'após finalizar o agente mesmo com erro se over libeira do documento
-	changeLock = False
-	idJob = job.Universalid
-	
-	If ( Not job.hasItem("lock") ) Then 
-		changeLock = True
-		Call job.replaceItemValue("lock", 1)
-	ElseIf job.Hasitem("lock") Then 
-		If job.getItemValue("lock")(0) = 0 Then
-			changeLock = True
-			Call job.replaceItemValue("lock", 1)
-		Else 
-			Exit Sub
-		End If	
-	Else
-		Exit Sub
+	'verifica se documento está bloqueado
+	If isLockedDocument() Then
+		Exit sub
 	End If
+	
+	'bloqueando documento
+	Call lockDocument()
 			
 	'inserindo campo para controle
 	If Not job.Hasitem("nthdocument") Then  
@@ -160,7 +151,7 @@ Sub Initialize
 		End If
 		
 		staJob = True
-		While staJob = True
+		While staJob
 			
 			staJob = False
 			
@@ -185,7 +176,6 @@ Sub Initialize
 				If seconds > 60 Then
 					staJob = False
 					job.nthdocument = nthdocument
-					Call job.save(True, False)
 				End If
 			End If
 		Wend
@@ -193,11 +183,14 @@ Sub Initialize
 	
 	'print de finalização do agente
 	If seconds > 60 Then
-		job.job_status = "AGUARDANDO"
+		job.job_status = "REPETIR"
+		Print("###############################################entrei no status REPETIR")
 	Else
-		job.job_status = "CONCLUIDO"	
+		job.job_status = "CONCLUÍDO"
+		Print("###############################################entrei no status concluido")	
 	End If
 	'job.job_status = "CONCLUIDO"	
+	call unlockDocument()
 	Call job.Save( True, False )
 	Print "Finalizando " + CStr(job.job_agente(0)) + " as " + Now 
 	Exit Sub
@@ -206,6 +199,7 @@ catch:
 	If Error <> "" Then 
 		Call jobPrint(job , "Agent " + job.job_agente(0) + " com Erro " + Error + " na linha" + Str(Erl) + " " + nameFunction) 
 		job.job_status = "ERRO"
+		call unlockDocument()
 		Call job.Save( True, False ) 
 		Print "Agente " + CStr(job.job_agente(0)) + " com Erro " + Error + " na linha" + Str(Erl) + " na função" + nameFunction
 		'print de finalização do agent

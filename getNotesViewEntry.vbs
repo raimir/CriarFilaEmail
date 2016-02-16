@@ -38,5 +38,6 @@ Sub Initialize
 	Wend
 
 	set nt2 = new notesdatetime(cstr(now))
+	seconds = nt2.Timedifferencedouble(nt1)
 
 End Sub
