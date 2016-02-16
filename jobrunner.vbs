@@ -10,9 +10,7 @@ Sub Initialize
 	Dim s As New NotesSession
 	
 	'hora de início da execução do jobrunner
-	Dim dt1 As NotesDateTime
-	Set dt1 = s.Createdatetime(Now)
-	Call dt1.Setnow()
+	Dim dt1 As NotesDateTime(now)
 	
 	'nome do jobrunner
 	Dim nomeAgenteJobRunnerVR As Variant
@@ -71,7 +69,7 @@ Sub Initialize
 	'indica que o jobrunner está em execução
 	Dim executando As Boolean
 	executando = True
-	While executando = True
+	While executando
 		
 		'buscando o job que controla esta instância do jobrunner
 		Call vJobCod.Refresh()

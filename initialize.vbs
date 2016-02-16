@@ -8,9 +8,9 @@ Sub Initialize
 	Dim auxStJob
 	
 	'variaveis para verificar se o job está ativo
-	Dim stDb As NotesDatabase
-	Dim stView As NotesView 
-	Dim stJob As NotesDocument
+	Dim dbJob As NotesDatabase
+	Dim viewJob As NotesView 
+	Dim statusJob As NotesDocument
 
 	'variaveis de controle de tempo
 	Dim runAgent As NotesDateTime
@@ -18,48 +18,43 @@ Sub Initialize
 	Dim seconds As Double
 
 	
-	'setando o nome da function
-	nameFunction = "Initialize"
-	
 	'Iniciando o agente
 	On Error GoTo catch	
 	
-	Set session = New NotesSession
-	'JOB documento de contexto
-	Set job = session.Documentcontext
-	
-	'usado para teste
-	'Dim dbJob As NotesDatabase  
-	'Set dbJob = session.Getdatabase("xtr-tinto/CONSISTE", "xtr-data\job-v1.nsf", False)
-	'Set job = dbJob.Getview("JOB-cod").Getdocumentbykey("job-v1-FEE8DA51E72CDC3803257F57006E8B2F", True)
-	
-	
-	Set jsonRead = New JSONReader
-	
 	'tempo inicio do agente
-	Set runAgent = New NotesDateTime( CStr(Now) )
+	Set runAgent = New NotesDateTime(Now)
 	
-	Print "Executando " + CStr(job.job_agente(0)) + " as " + Now
+	'setando o nome da function
+	nameFunction = "Initialize"
 	
+	
+	Set session = New NotesSession
+	
+	'documento JOB
+	Set job = session.Documentcontext
+
 	'verifica se documento está bloqueado
 	If isLockedDocument() Then
-		Exit sub
+		Exit Sub
 	End If
 	
 	'bloqueando documento
 	Call lockDocument()
-			
-	'inserindo campo para controle
-	If Not job.Hasitem("nthdocument") Then  
-		job.nthdocument = ""
-	End If	
 	Call job.save(True, False)
 	
+
+
+	Set dbJob = job.Parentdatabase
+	Set viewJob = dbJob.getView("JOB-cod")
+	'usado para teste
+	'Set job = dbJob.Getview(""JOB-cod"").Getdocumentbykey("job-v1-FEE8DA51E72CDC3803257F57006E8B2F", True)
+	
+	'Objeto para converter string em formato JSON para para Notes
+	Set jsonRead = New JSONReader
 	
 	
-	'variaves de status JOB
-	Set stDb = job.Parentdatabase
-	Set stView = stDb.Getview("JOB-cod")
+	Print "Executando " + CStr(job.job_agente(0)) + " as " + Now
+	
 	
 	idInstalacao = job.idInstalacao(0)
 	entidadePrincipal = job.entidadePrincipal(0)
@@ -113,14 +108,16 @@ Sub Initialize
 	If selecionarTodos = 0 Then
 		ForAll docP In docSelecionados
 			'verificando o status do job para saber se está ativo
-			Set stJob = stView.Getdocumentbykey(job.xtr_cod(0), True)	
-			If stJob Is Nothing Then
+			Set statusJob = viewJob.Getdocumentbykey(job.xtr_cod(0), True)	
+			If statusJob Is Nothing Then
 				Exit ForAll
 			End If
 			
 			Set docPrincipal = listasView.getItem( StrLeft(entidadePrincipal,"-") ).getDocumentByKey( docP, True )
 			Call createDocumentFila( docPrincipal, docModelo, docCampanha, docMetrica )
 		End ForAll
+	
+
 	Else 
 		Dim viewP As NotesView
 		Dim viewNav As NotesViewNavigator
@@ -130,6 +127,8 @@ Sub Initialize
 		
 		Set viewP = listasDB.getItem( StrLeft(entidadePrincipal,"-") ).getView( viewPrincipal )
 		If Not viewP Is Nothing Then
+			
+			'criando o view navigator
 			If viewP.isCategorized Then 
 				If filtroPrincipal <> "" Then 
 					Set viewNav = viewP.createViewNavFromCategory(filtroPrincipal)
@@ -139,46 +138,53 @@ Sub Initialize
 			Else 
 				Set viewNav = viewP.createViewNav()
 			End If			 
-		End If
 		
-		'pegando a posição do último documento que foi enviado
-		nthdocument = job.nthdocument(0)
-		If nthdocument <> "" Then 
-			Set entryP = viewNav.Getpos(nthdocument, ".")
-			Set entryP = viewNav.getNext(entryP)
-		Else
-			Set entryP = viewNav.getFirst()
-		End If
 		
-		staJob = True
-		While staJob
-			
-			staJob = False
-			
-			If Not entryP Is Nothing Then
-				If entryP.isDocument() Then 
-					nthdocument = entryP.Getposition(".")
-					Set docPrincipal = entryP.Document()
-					Call createDocumentFila( docPrincipal, docModelo, docCampanha, docMetrica )
-					Set entryP = viewNav.getNext(entryP)
-					staJob = True
-				End If
-			End If
-			
-			'verificando o status do job para saber se o documento é existente
-			Set stJob = stView.Getdocumentbykey( job.xtr_cod(0), True )	
-			If stJob Is Nothing Then
-				staJob = False
+			'pegando a posição do último documento que foi enviado
+			nthdocument = job.nthdocument(0)
+			If nthdocument <> "" Then 
+				Set entryP = viewNav.Getpos(nthdocument, ".")
+				Set entryP = viewNav.getNext(entryP)
 			Else
-				'parando agent depois de ser executado por um determinado tempo
-				Set stopAgent = New NotesDateTime( CStr(Now) )
-				seconds = stopAgent.Timedifferencedouble(runAgent)
-				If seconds > 60 Then
-					staJob = False
-					job.nthdocument = nthdocument
-				End If
+				Set entryP = viewNav.getFirst()
 			End If
-		Wend
+			
+			
+			'percorrendo cada linha da visão	
+			staJob = True
+			While staJob
+				staJob = False
+				
+				If Not entryP Is Nothing Then
+					If entryP.isDocument() Then 
+						nthdocument = entryP.Getposition(".")
+						Set docPrincipal = entryP.Document()
+						
+						'criando documento na fila
+						Call createDocumentFila( docPrincipal, docModelo, docCampanha, docMetrica )
+						Set entryP = viewNav.getNext(entryP)
+						staJob = True
+					
+						'verificando o status do job para saber se o documento é existente
+						Set statusJob = viewJob.Getdocumentbykey( job.xtr_cod(0), True )	
+						If statusJob Is Nothing Then
+							staJob = False
+						Else
+							'parando agent depois de ser executado por um determinado tempo
+							Set stopAgent = New NotesDateTime(Now)
+							seconds = stopAgent.Timedifferencedouble(runAgent)
+							If seconds > 60 Then
+								staJob = False
+								job.nthdocument = nthdocument
+							End If
+						End If
+					End If	
+				End If
+
+			Wend
+
+		End If	
+
 	End If	
 	
 	'print de finalização do agente
@@ -190,7 +196,7 @@ Sub Initialize
 		Print("###############################################entrei no status concluido")	
 	End If
 	'job.job_status = "CONCLUIDO"	
-	call unlockDocument()
+	Call unlockDocument()
 	Call job.Save( True, False )
 	Print "Finalizando " + CStr(job.job_agente(0)) + " as " + Now 
 	Exit Sub
@@ -199,7 +205,7 @@ catch:
 	If Error <> "" Then 
 		Call jobPrint(job , "Agent " + job.job_agente(0) + " com Erro " + Error + " na linha" + Str(Erl) + " " + nameFunction) 
 		job.job_status = "ERRO"
-		call unlockDocument()
+		Call unlockDocument()
 		Call job.Save( True, False ) 
 		Print "Agente " + CStr(job.job_agente(0)) + " com Erro " + Error + " na linha" + Str(Erl) + " na função" + nameFunction
 		'print de finalização do agent
