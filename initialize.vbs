@@ -43,7 +43,6 @@ Sub Initialize
 	Call job.save(True, False)
 	
 
-
 	Set dbJob = job.Parentdatabase
 	Set viewJob = dbJob.getView("JOB-cod")
 	'usado para teste
@@ -182,7 +181,7 @@ Sub Initialize
 				End If
 
 			Wend
-
+			job.nthdocument = nthdocument
 		End If	
 
 	End If	
@@ -190,10 +189,8 @@ Sub Initialize
 	'print de finalização do agente
 	If seconds > 60 Then
 		job.job_status = "REPETIR"
-		Print("###############################################entrei no status REPETIR")
 	Else
 		job.job_status = "CONCLUÍDO"
-		Print("###############################################entrei no status concluido")	
 	End If
 	'job.job_status = "CONCLUIDO"	
 	Call unlockDocument()
